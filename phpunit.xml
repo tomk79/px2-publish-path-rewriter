@@ -1,0 +1,7 @@
+<phpunit>
+	<testsuites>
+		<testsuite>
+			<file>px-files/_sys/tests/mainTest.php</file>
+		</testsuite>
+	</testsuites>
+</phpunit>
