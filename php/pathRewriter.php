@@ -176,48 +176,4 @@ class pathRewriter{
 		return $rtn;
 	}
 
-	// /**
-	//  * 変換後の新しいパスを取得
-	//  */
-	// private function get_new_path( $path ){
-	// 	if( preg_match( '/^(?:[a-zA-Z0-9]+\:|\/\/|\#)/', $path ) ){
-	// 		return $path;
-	// 	}
-	// 	$cd = $this->px->href( $this->px->req()->get_request_file_path() );
-	// 	$cd = preg_replace( '/^(.*)(\/.*?)$/si', '$1', $cd );
-	// 	if( !strlen($cd) ){
-	// 		$cd = '/';
-	// 	}
-	//
-	// 	switch(strtolower($this->options->to)){
-	// 		case 'relate':
-	// 			// 相対パスへ変換
-	// 			$path = $this->px->fs()->get_realpath($path, $cd);
-	// 			$path = $this->px->fs()->get_relatedpath($path, $cd);
-	// 			break;
-	// 		case 'absolute':
-	// 			// 絶対パスへ変換
-	// 			$path = $this->px->fs()->get_realpath($path, $cd);
-	// 			break;
-	// 		case 'pass':
-	// 		default:
-	// 			// 処理を行わない
-	// 			break;
-	// 	}
-	//
-	// 	$path = $this->px->fs()->normalize_path($path);
-	//
-	// 	if( @is_null($this->options->supply_index_filename) ){
-	// 		// null なら処理しない
-	// 	}elseif( $this->options->supply_index_filename ){
-	// 		// 省略されたインデックスファイル名を付与
-	// 		$path = preg_replace('/\/((?:\?|\#).*)?$/si','/'.$this->px->get_directory_index_primary().'$1',$path);
-	// 	}else{
-	// 		// 省略できるインデックスファイル名を削除
-	// 		$path = preg_replace('/\/(?:'.$this->px->get_directory_index_preg_pattern().')((?:\?|\#).*)?$/si','/$1',$path);
-	// 	}
-	//
-	// 	return $path;
-	// }
-
 }

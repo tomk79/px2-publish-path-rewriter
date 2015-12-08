@@ -124,18 +124,19 @@ class mainTest extends PHPUnit_Framework_TestCase{
 		// var_dump($publish_log);
 		$this->assertEquals( $publish_log[0][0], 'datetime' );
 		$this->assertEquals( $publish_log[0][1], 'path' );
-		$this->assertEquals( $publish_log[0][2], 'proc_type' );
-		$this->assertEquals( $publish_log[0][3], 'status_code' );
-		$this->assertEquals( $publish_log[0][4], 'status_message' );
-		$this->assertEquals( $publish_log[0][5], 'errors' );
-		$this->assertEquals( $publish_log[0][6], 'filesize' );
-		$this->assertEquals( $publish_log[0][7], 'proc_microtime' );
-		$this->assertNull( @$publish_log[0][8] );
+		$this->assertEquals( $publish_log[0][2], 'path_rewrited' );
+		$this->assertEquals( $publish_log[0][3], 'proc_type' );
+		$this->assertEquals( $publish_log[0][4], 'status_code' );
+		$this->assertEquals( $publish_log[0][5], 'status_message' );
+		$this->assertEquals( $publish_log[0][6], 'errors' );
+		$this->assertEquals( $publish_log[0][7], 'filesize' );
+		$this->assertEquals( $publish_log[0][8], 'proc_microtime' );
+		$this->assertNull( @$publish_log[0][9] );
 		$this->assertTrue( is_file( __DIR__.'/testData/standard/px-files/_sys/ram/publish/alert_log.csv' ) );
 		foreach( $publish_log as $publish_log_row ){
 			if( $publish_log_row[1] == '/errors/server_side_unknown_error.html' ){
-				$this->assertEquals( $publish_log_row[4], 'Unknown server error' );
-				$this->assertEquals( $publish_log_row[5], '1 errors: Unknown server error.;' );
+				$this->assertEquals( $publish_log_row[5], 'Unknown server error' );
+				$this->assertEquals( $publish_log_row[6], '1 errors: Unknown server error.;' );
 			}
 		}
 

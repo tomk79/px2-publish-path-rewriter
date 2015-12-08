@@ -1,6 +1,8 @@
 "*path","*content","*id","*title","*title_breadcrumb","*title_h1","*title_label","*title_full","*logical_path","*list_flg","*layout","*orderby","*keywords","*description","*category_top_flg","*role"
 "/",,,"HOME",,,,,,1,"top",,,,,
 "/sample_pages/",,,"Sample Page 1",,,,,,1,,,"","",1,
+"/sample_pages/conflict/before_1.html",,,"Conflict - before 1",,,,,"/sample_pages/",1,,,"","",1,
+"/sample_pages/conflict/before_2.html",,,"Conflict - before 2",,,,,"/sample_pages/",1,,,"","",1,
 "/sample_pages/page2/",,,"Sample Page 2",,,,,,1,,,"","",1,
 "/sample_pages/page3/",,,"Sample Page 3",,,,,,1,,,"","",1,
 "/sample_pages/help/",,,"HELP",,,,,,1,,,"","",,

@@ -366,10 +366,23 @@ function cont_EditPublishTargetPathApply(formElm){
 			$status_message = null;
 			$errors = array();
 			$microtime = microtime(true);
+
+			$is_conflict = false;
+			if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
+				$is_conflict = true;
+			}
+
 			switch( $proc_type ){
 				case 'direct':
 					// direct
 					print $ext.' -> direct'."\n";
+
+					if( $is_conflict ){
+						if( md5_file( dirname($_SERVER['SCRIPT_FILENAME']).$path ) != md5_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
+							$this->alert_log(array( @date('Y-m-d H:i:s'), $path, '[path rewrite] conflict rewrite result. "'.$path_rewrited.'" is already exists.' ));
+						}
+					}
+
 					if( !$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ) ){
 						$status_code = 500;
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'FAILED to making parent directory.' ));
@@ -431,6 +444,11 @@ function cont_EditPublishTargetPathApply(formElm){
 					}elseif( $bin->status >= 300 ){
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'status: '.$bin->status.' '.$bin->message ));
 					}elseif( $bin->status >= 200 ){
+						if( $is_conflict ){
+							if( md5( base64_decode( @$bin->body_base64 ) ) != md5_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
+								$this->alert_log(array( @date('Y-m-d H:i:s'), $path, '[path rewrite] conflict rewrite result. "'.$path_rewrited.'" is already exists.' ));
+							}
+						}
 						$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) );
 						$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited, base64_decode( @$bin->body_base64 ) );
 						foreach( $bin->relatedlinks as $link ){
@@ -482,6 +500,7 @@ function cont_EditPublishTargetPathApply(formElm){
 			$this->log(array(
 				@date('Y-m-d H:i:s') ,
 				$path ,
+				($path!=$path_rewrited?$path_rewrited:'') ,
 				$proc_type ,
 				$status_code ,
 				$status_message ,
@@ -492,7 +511,7 @@ function cont_EditPublishTargetPathApply(formElm){
 
 			if( !empty( $this->path_publish_dir ) ){
 				// パブリッシュ先ディレクトリに都度コピー
-				if( $this->px->fs()->is_file( $this->path_publish_dir.$this->path_docroot.$path_rewrited ) ){
+				if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
 					$this->px->fs()->mkdir_r( dirname( $this->path_publish_dir.$this->path_docroot.$path_rewrited ) );
 					$this->px->fs()->copy(
 						$this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ,
@@ -675,6 +694,7 @@ function cont_EditPublishTargetPathApply(formElm){
 			error_log( $this->px->fs()->mk_csv( array(array(
 				'datetime' ,
 				'path' ,
+				'path_rewrited' ,
 				'proc_type' ,
 				'status_code' ,
 				'status_message' ,

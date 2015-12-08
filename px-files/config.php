@@ -106,8 +106,9 @@ return call_user_func( function(){
 		'tomk79\pickles2\publishPathRewriter\publish::register('.json_encode([
 			"PX"=>"publish",
 			"rules"=>[
-				['/\/sample_pages\/(.*\.(?:html))$/s','/sample/$1'],
-				['/(.*)\/([^\/]+)_files\/resources\/(.*\.(?:jpg|png|gif))/s','$1/img/$3'],
+				['/^(.*)\/([^\/]+)_files(?:\/resources)?\/(.*)$/s','$1/img/$3'],
+				['/^\/sample_pages\/conflict\/before_[0-9]\.html$/s','/sample_pages/conflict/after.html'],
+				['/^\/sample_pages\/(.*\.(?:html))$/s','/sample/$1'],
 			],
 		]).')' ,
 
