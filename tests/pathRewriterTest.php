@@ -9,7 +9,8 @@ class pathRewriterTest extends PHPUnit_Framework_TestCase{
 	 */
 	public function testStandardIO(){
 		// make instance of pathRewriter
-		$pathRewriter = new tomk79\pickles2\publishPathRewriter\pathRewriter( array(
+		$px = new picklesFramework2\px(__DIR__.'/testData/standard/px-files/');
+		$pathRewriter = new tomk79\pickles2\publishPathRewriter\pathRewriter( $px, array(
 			array('/\/abc\/([^\/]+)_files\/(.*)$/s', '/abc/img/$1_$2'),
 		) );
 
