@@ -97,7 +97,13 @@ return call_user_func( function(){
 		'picklesFramework2\commands\api::register' ,
 
 		// PX=publish
-		'picklesFramework2\commands\publish::register' ,
+		// 'picklesFramework2\commands\publish::register' ,
+		'tomk79\pickles2\publishPathRewriter\publish::register('.json_encode([
+			"PX"=>"publish",
+			"rules"=>[
+				['/(.*)\/([^\/]+)_files\/(.*\.(?:jpg|png|gif))/s','$1/img/$3'],
+			],
+		]).')' ,
 
 	];
 

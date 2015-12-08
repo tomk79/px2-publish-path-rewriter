@@ -50,28 +50,39 @@ class publish{
 	private $paths_done = array();
 
 	/**
+	 * オプション
+	 */
+	private $options;
+
+	/**
+	 * pathRewriter オブジェクト
+	 */
+	private $pathRewriter;
+
+	/**
 	 * Before content function
 	 * @param object $px Picklesオブジェクト
+	 * @param object $options オプション
+	 * PX: PxCommand名。省略時、'publish'。
+	 * rules: パス書き換えルール。2次元配列で複数指定可。
 	 */
-	public static function register( $px ){
-		$px->pxcmd()->register('publish', function($px){
-			$pxcmd = $px->get_px_command();
-			$self = new self( $px );
-			if( @$pxcmd[1] == 'run' ){
-				$self->exec_publish();
-			}else{
-				$self->exec_home();
-			}
-			exit;
-		});
+	public static function register( $px, $options = null ){
+		$self = new self( $px, $options );
+		$cmd_name = 'publish';
+		if( @strlen($options->PX) ){
+			$cmd_name = $options->PX;
+		}
+		$px->pxcmd()->register($cmd_name, array($self, 'execute'));
 	}
 
 	/**
 	 * constructor
 	 * @param object $px Picklesオブジェクト
+	 * @param object $options オプション
 	 */
-	public function __construct( $px ){
+	public function __construct( $px, $options = null ){
 		$this->px = $px;
+		$this->options = $options;
 
 		$this->path_tmp_publish = $px->fs()->get_realpath( $px->get_path_homedir().'_sys/ram/publish/' );
 		$this->path_lockfile = $this->path_tmp_publish.'applock.txt';
@@ -99,6 +110,24 @@ class publish{
 			$this->path_region = $param_path_region;
 			$this->param_path_region = $param_path_region;
 		}
+
+		// make instance of pathRewriter
+		$this->pathRewriter = new pathRewriter( $this->options->rules );
+	}
+
+	/**
+	 * パブリッシュコマンドを実行する
+	 * @param object $px Picklesオブジェクト
+	 */
+	public function execute($px){
+		// var_dump($this->options);
+		$pxcmd = $px->get_px_command();
+		if( @$pxcmd[1] == 'run' ){
+			$this->exec_publish();
+		}else{
+			$this->exec_home();
+		}
+		exit;
 	}
 
 	/**
@@ -148,6 +177,17 @@ class publish{
 		if( $this->px->req()->is_cmd() ){
 			header('Content-type: text/plain;');
 			print $this->cli_header();
+			for($i=0; $i<10; $i++){
+				print '_'; usleep(400000);
+				print "\r";
+				print '\\'; usleep(50000);
+				print "\r";
+				print '|'; usleep(50000);
+				print "\r";
+				print '/'; usleep(50000);
+				print "\r";
+			}
+
 			print 'execute PX command => "?PX=publish.run"'."\n";
 			print $this->cli_footer();
 		}else{
@@ -313,7 +353,12 @@ function cont_EditPublishTargetPathApply(formElm){
 			}
 			foreach( $this->paths_queue as $path=>$val ){break;}
 			print '------------'."\n";
-			print $path."\n";
+			$path_rewrited = $this->pathRewriter->convert($path);
+			print $path;
+			if( $path != $path_rewrited ){
+				print ' -> '.$path_rewrited;
+			}
+			print "\n";
 
 			$ext = strtolower( pathinfo( $path , PATHINFO_EXTENSION ) );
 			$proc_type = $this->px->get_path_proc_type( $path );
@@ -325,12 +370,12 @@ function cont_EditPublishTargetPathApply(formElm){
 				case 'direct':
 					// direct
 					print $ext.' -> direct'."\n";
-					if( !$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) ) ){
+					if( !$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ) ){
 						$status_code = 500;
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'FAILED to making parent directory.' ));
 						break;
 					}
-					if( !$this->px->fs()->copy( dirname($_SERVER['SCRIPT_FILENAME']).$path , $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) ){
+					if( !$this->px->fs()->copy( dirname($_SERVER['SCRIPT_FILENAME']).$path , $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
 						$status_code = 500;
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'FAILED to copying file.' ));
 						break;
@@ -386,8 +431,8 @@ function cont_EditPublishTargetPathApply(formElm){
 					}elseif( $bin->status >= 300 ){
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'status: '.$bin->status.' '.$bin->message ));
 					}elseif( $bin->status >= 200 ){
-						$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) );
-						$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path, base64_decode( @$bin->body_base64 ) );
+						$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) );
+						$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited, base64_decode( @$bin->body_base64 ) );
 						foreach( $bin->relatedlinks as $link ){
 							$link = $this->px->fs()->get_realpath( $link, dirname($this->path_docroot.$path).'/' );
 							$link = $this->px->fs()->normalize_path( $link );
@@ -426,17 +471,17 @@ function cont_EditPublishTargetPathApply(formElm){
 				$status_code ,
 				$status_message ,
 				$str_errors,
-				@filesize($this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path),
+				@filesize($this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited),
 				microtime(true)-$microtime
 			));
 
 			if( !empty( $this->path_publish_dir ) ){
 				// パブリッシュ先ディレクトリに都度コピー
-				if( $this->px->fs()->is_file( $this->path_publish_dir.$this->path_docroot.$path ) ){
-					$this->px->fs()->mkdir_r( dirname( $this->path_publish_dir.$this->path_docroot.$path ) );
+				if( $this->px->fs()->is_file( $this->path_publish_dir.$this->path_docroot.$path_rewrited ) ){
+					$this->px->fs()->mkdir_r( dirname( $this->path_publish_dir.$this->path_docroot.$path_rewrited ) );
 					$this->px->fs()->copy(
-						$this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ,
-						$this->path_publish_dir.$this->path_docroot.$path
+						$this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ,
+						$this->path_publish_dir.$this->path_docroot.$path_rewrited
 					);
 					print ' -> copied to publish dir'."\n";
 				}

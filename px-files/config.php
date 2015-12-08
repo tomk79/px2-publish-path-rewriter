@@ -52,6 +52,7 @@ return call_user_func( function(){
 		'/phpunit.xml' => 'ignore' ,
 		'/.px_execute.php' => 'ignore' ,
 		'/php/*' => 'ignore' ,
+		'/tests/*' => 'ignore' ,
 		'/px-files/*' => 'ignore' ,
 		'*.ignore/*' => 'ignore' ,
 		'*.ignore.*' => 'ignore' ,
@@ -102,7 +103,13 @@ return call_user_func( function(){
 		'picklesFramework2\commands\api::register' ,
 
 		// PX=publish
-		'tomk79\pickles2\publishPathRewriter\publish::register' ,
+		'tomk79\pickles2\publishPathRewriter\publish::register('.json_encode([
+			"PX"=>"publish",
+			"rules"=>[
+				['/\/sample_pages\/(.*\.(?:html))$/s','/sample/$1'],
+				['/(.*)\/([^\/]+)_files\/resources\/(.*\.(?:jpg|png|gif))/s','$1/img/$3'],
+			],
+		]).')' ,
 
 	];
 
@@ -154,6 +161,21 @@ return call_user_func( function(){
 	// funcs: Before output
 	$conf->funcs->before_output = [
 	];
+
+
+
+	// -------- config for Plugins. --------
+	// その他のプラグインに対する設定を行います。
+	$conf->plugins = new stdClass;
+
+	// config for Pickles2 Desktop Tool.
+	$conf->plugins->px2dt = new stdClass;
+	$conf->plugins->px2dt->paths_module_template = [
+		"PlainHTMLElements" => "./vendor/pickles2/broccoli-module-plain-html-elements/modules/",
+		// "local" => "./px-files/modules/",
+		"FESS" => "./vendor/pickles2/broccoli-module-fess/modules/",
+	];
+
 
 	// -------- PHP Setting --------
 

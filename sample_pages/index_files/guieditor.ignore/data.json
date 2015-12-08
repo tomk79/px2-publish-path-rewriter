@@ -1,0 +1,32 @@
+{
+ "bowl": {
+  "main": {
+   "modId": "_sys/root",
+   "fields": {
+    "main": [
+     {
+      "modId": "PlainHTMLElements:PlainHTML/Markdown",
+      "fields": {
+       "main": "## TEST CONTENTS\n\ncomposing contents."
+      },
+      "dec": "",
+      "anchor": ""
+     },
+     {
+      "modId": "PlainHTMLElements:PlainHTML/image",
+      "fields": {
+       "href": "",
+       "image_src": {
+        "resKey": "6d64451b2babadf52f16d91a70ac53d4",
+        "path": "./index_files/resources/father.png"
+       },
+       "alt_text": "my Father"
+      },
+      "dec": "",
+      "anchor": ""
+     }
+    ]
+   }
+  }
+ }
+}

@@ -1,7 +1,8 @@
 <phpunit>
 	<testsuites>
 		<testsuite>
-			<file>px-files/_sys/tests/mainTest.php</file>
+			<file>tests/pathRewriterTest.php</file>
+			<file>tests/mainTest.php</file>
 		</testsuite>
 	</testsuites>
 </phpunit>
