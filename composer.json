@@ -30,7 +30,8 @@
     "autoload": {
         "files": [
             "php/publish.php" ,
-            "php/pathRewriter.php"
+            "php/pathRewriter.php" ,
+            "php/simple_html_dom.php"
         ]
     }
 }

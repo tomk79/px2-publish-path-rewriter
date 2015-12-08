@@ -112,7 +112,7 @@ class publish{
 		}
 
 		// make instance of pathRewriter
-		$this->pathRewriter = new pathRewriter( $this->options->rules );
+		$this->pathRewriter = new pathRewriter( $this->px, $this->options->rules );
 	}
 
 	/**
@@ -457,6 +457,21 @@ function cont_EditPublishTargetPathApply(formElm){
 					}
 
 					break;
+			}
+
+			$tmp_realpath_file = $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited;
+			if( $this->px->fs()->is_file( $tmp_realpath_file ) ){
+				$tmpBin = $this->px->fs()->read_file( $tmp_realpath_file );
+				switch(strtolower($ext)){
+					case 'html':
+					case 'htm':
+						$tmpBin = $this->pathRewriter->convert_html($tmpBin, $path);
+						break;
+					case 'css':
+						$tmpBin = $this->pathRewriter->convert_css($tmpBin, $path);
+						break;
+				}
+				$this->px->fs()->save_file( $tmp_realpath_file, $tmpBin );
 			}
 
 			$str_errors = '';
