@@ -43,6 +43,7 @@ class pathRewriter{
 		// var_dump($path);
 		if(is_null($cd)){ $cd = dirname($path); }
 		$path = $this->px->fs()->get_realpath($path, $cd);//絶対パスに変換
+		$path = $this->px->fs()->normalize_path($path);//normalize
 		// var_dump($path);
 
 		$rtn = $path;
