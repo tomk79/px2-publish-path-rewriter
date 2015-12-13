@@ -172,14 +172,19 @@ class pathRewriter{
 				break;
 			}
 			$rtn .= $matched[1];
-			$rtn .= '@import "';
+			$rtn .= '@import ';
 			$res = trim( $matched[2] );
-			if( preg_match( '/^(\"|\')(.*)\1$/si', $res, $matched2 ) ){
-				$res = trim( $matched2[2] );
+			if( !preg_match('/^url\s*\(/', $res) ){
+				$rtn .= '"';
+				if( preg_match( '/^(\"|\')(.*)\1$/si', $res, $matched2 ) ){
+					$res = trim( $matched2[2] );
+				}
+				$res = $this->convert( $res, dirname($original_path) );
+				$rtn .= $res;
+				$rtn .= '"';
+			}else{
+				$rtn .= $res;
 			}
-			$res = $this->convert( $res, dirname($original_path) );
-			$rtn .= $res;
-			$rtn .= '"';
 			$src = $matched[3];
 		}
 
