@@ -112,7 +112,7 @@ class publish{
 		}
 
 		// make instance of pathRewriter
-		$this->pathRewriter = new pathRewriter( $this->px, $this->options->rules );
+		$this->pathRewriter = new pathRewriter( $this->px, $this->options );
 	}
 
 	/**

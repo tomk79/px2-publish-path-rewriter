@@ -13,7 +13,7 @@ Pickles Framework(PxFW) のパブリッシュ機能を代替し、パス書き�
     "repositories": [
         {
             "type": "git",
-            "url": "https://github.com/tomk79/tomk79/px2-publish-path-rewriter.git"
+            "url": "https://github.com/tomk79/px2-publish-path-rewriter.git"
         }
     ],
     "require": {

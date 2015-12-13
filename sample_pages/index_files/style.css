@@ -1,0 +1,7 @@
+@charset "urt-8";
+@import "./resources/father.png";
+@import url("./resources/father.png");
+@import url(./resources/father.png);
+.cont_a{
+    background-image: url('./resources/father.png');
+}

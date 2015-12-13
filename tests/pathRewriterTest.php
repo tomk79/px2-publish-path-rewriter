@@ -11,7 +11,9 @@ class pathRewriterTest extends PHPUnit_Framework_TestCase{
 		// make instance of pathRewriter
 		$px = new picklesFramework2\px(__DIR__.'/testData/standard/px-files/');
 		$pathRewriter = new tomk79\pickles2\publishPathRewriter\pathRewriter( $px, array(
-			array('/\/abc\/([^\/]+)_files\/(.*)$/s', '/abc/img/$1_$2'),
+			"rules"=>array(
+				array('/\/abc\/([^\/]+)_files\/(.*)$/s', '/abc/img/$1_$2'),
+			)
 		) );
 
 		$this->assertEquals( $pathRewriter->convert( '/abc/' ), '/abc/' );

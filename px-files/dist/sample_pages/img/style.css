@@ -1,0 +1,7 @@
+@charset "UTF-8";
+@import "/sample_pages/img/father.png";
+@import "/sample_pages/img/url("/sample_pages/img/father.png")";
+@import "/sample_pages/img/url("/sample_pages/img/father.png")";
+.cont_a{
+    background-image: url("/sample_pages/img/father.png");
+}

@@ -110,6 +110,12 @@ return call_user_func( function(){
 				['/^\/sample_pages\/conflict\/before_[0-9]\.html$/s','/sample_pages/conflict/after.html'],
 				['/^\/sample_pages\/(.*\.(?:html))$/s','/sample/$1'],
 			],
+			"dom_selectors"=>array(
+				'*[href]'=>'href',
+				'*[src]'=>'src',
+				'form[action]'=>'action',
+				'*[data-custom-src]'=>'data-custom-src',
+			),
 		]).')' ,
 
 	];

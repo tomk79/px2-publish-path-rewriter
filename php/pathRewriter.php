@@ -20,13 +20,20 @@ class pathRewriter{
 	private $rules;
 
 	/**
+	 * DOM抽出ルール
+	 */
+	private $dom_selectors;
+
+	/**
 	 * constructor
 	 * @param object $px Picklesオブジェクト
-	 * @param array $rules 変換ルール
+	 * @param array $options オプション
 	 */
-	public function __construct($px, $rules){
+	public function __construct($px, $options){
+		$options = json_decode(json_encode($options));
 		$this->px = $px;
-		$this->rules = $rules;
+		$this->rules = @$options->rules;
+		$this->dom_selectors = @$options->dom_selectors;
 	}
 
 	/**
@@ -47,7 +54,11 @@ class pathRewriter{
 		// var_dump($path);
 
 		$rtn = $path;
-		foreach( $this->rules as $rule ){
+		$rules = array();
+		if( !@is_null($this->rules) ){
+			$rules = $this->rules;
+		}
+		foreach( $rules as $rule ){
 			if( !preg_match( $rule[0], $path ) ){
 				continue;
 			}
@@ -78,19 +89,24 @@ class pathRewriter{
 			DEFAULT_SPAN_TEXT // $defaultSpanText
 		);
 
-		$ret = $html->find('*[href]');
-		foreach( $ret as $retRow ){
-			$val = $retRow->getAttribute('href');
-			$val = $this->convert($val, dirname($original_path));
-			$retRow->setAttribute('href', $val);
+		$conf_dom_selectors = array(
+			'*[href]'=>'href',
+			'*[src]'=>'src',
+			'form[action]'=>'action',
+		);
+		if( !@is_null($this->dom_selectors) ){
+			$conf_dom_selectors = $this->dom_selectors;
 		}
 
-		$ret = $html->find('*[src]');
-		foreach( $ret as $retRow ){
-			$val = $retRow->getAttribute('src');
-			$val = $this->convert($val, dirname($original_path));
-			$retRow->setAttribute('src', $val);
+		foreach( $conf_dom_selectors as $selector=>$attr_name ){
+			$ret = $html->find($selector);
+			foreach( $ret as $retRow ){
+				$val = $retRow->getAttribute($attr_name);
+				$val = $this->convert($val, dirname($original_path));
+				$retRow->setAttribute($attr_name, $val);
+			}
 		}
+
 
 		$ret = $html->find('*[style]');
 		foreach( $ret as $retRow ){
@@ -103,13 +119,6 @@ class pathRewriter{
 			$val = str_replace('<', '&lt;', $val);
 			$val = str_replace('>', '&gt;', $val);
 			$retRow->setAttribute('style', $val);
-		}
-
-		$ret = $html->find('form[action]');
-		foreach( $ret as $retRow ){
-			$val = $retRow->getAttribute('action');
-			$val = $this->convert($val, dirname($original_path));
-			$retRow->setAttribute('action', $val);
 		}
 
 		$ret = $html->find('style');
