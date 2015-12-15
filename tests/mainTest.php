@@ -157,6 +157,7 @@ class mainTest extends PHPUnit_Framework_TestCase{
 		clearstatcache();
 		$this->assertTrue( $this->common_error( $output ) );
 		$this->assertTrue( !is_dir( __DIR__.'/testData/standard/caches/p/' ) );
+		$this->assertTrue( !is_dir( __DIR__.'/testData/standard/px-files/_sys/ram/caches/sitemaps/' ) );
 
 	}//testStandardPublish()
 
@@ -184,6 +185,7 @@ class mainTest extends PHPUnit_Framework_TestCase{
 		clearstatcache();
 		$this->assertTrue( $this->common_error( $output ) );
 		$this->assertTrue( !is_dir( __DIR__.'/testData/standard/caches/p/' ) );
+		$this->assertTrue( !is_dir( __DIR__.'/testData/standard/px-files/_sys/ram/caches/sitemaps/' ) );
 
 	}//testNothingToPublish()
 
@@ -230,6 +232,7 @@ class mainTest extends PHPUnit_Framework_TestCase{
 		clearstatcache();
 		$this->assertTrue( $this->common_error( $output ) );
 		$this->assertTrue( !is_dir( __DIR__.'/testData/publish/px2/caches/p/' ) );
+		$this->assertTrue( !is_dir( __DIR__.'/testData/publish/px2/px-files/_sys/ram/caches/sitemaps/' ) );
 
 	}//testPublishDirectoryTest()
 

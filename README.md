@@ -53,6 +53,9 @@ return call_user_func( function(){
     //       各項目ごとに、pregパターン と 変換後のパスのルールを記述します。
     //       上の項目から順に、pregパターンにマッチするか検索されます。
     //       マッチするルールを見つけると、それを適用して、検索を終了します。
+    //     array 'dom_selectors':
+    //       パス変換対象とする属性を検索するセレクタを設定します。
+    //       キーにセレクタを、値に属性名を設定します。
     'tomk79\pickles2\publishPathRewriter\publish::register('.json_encode([
       "PX"=>"publish",
       "rules"=>[
@@ -60,6 +63,11 @@ return call_user_func( function(){
         ['/^\/sample_pages\/conflict\/before_[0-9]\.html$/s','/sample_pages/conflict/after.html'],
         ['/^\/sample_pages\/(.*\.(?:html))$/s','/sample/$1'],
       ],
+      "dom_selectors"=>array(
+        '*[href]'=>'href',
+        '*[src]'=>'src',
+        'form[action]'=>'action',
+      ),
     ]).')' ,
 
   ];
