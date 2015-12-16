@@ -26,7 +26,6 @@ class mainTest extends PHPUnit_Framework_TestCase{
 			'/?PX=api.get.version' ,
 		] );
 		clearstatcache();
-
 		// var_dump($output);
 		$this->assertTrue( $this->common_error( $output ) );
 		$this->assertEquals( 1, preg_match('/^[0-9]+\.[0-9]+\.[0-9]+(?:\-(?:alpha|beta|rc)(?:\.[a-zA-Z0-9][a-zA-Z0-9\.]*)?)?(?:\+[a-zA-Z0-9\.]+)?$/s', json_decode($output)) );
@@ -39,32 +38,18 @@ class mainTest extends PHPUnit_Framework_TestCase{
 			'/?PX=api.get.config' ,
 		] );
 		clearstatcache();
-
-
-		// ----- publish -----
-
-		// -------------------
-		// api.get.vertion
-		$output = $this->passthru( [
-			'php',
-			__DIR__.'/testData/publish/px2/.px_execute.php' ,
-			'/?PX=api.get.version' ,
-		] );
-		clearstatcache();
-
 		// var_dump($output);
 		$this->assertTrue( $this->common_error( $output ) );
-		$this->assertEquals( 1, preg_match('/^[0-9]+\.[0-9]+\.[0-9]+(?:\-(?:alpha|beta|rc)(?:\.[a-zA-Z0-9][a-zA-Z0-9\.]*)?)?(?:\+[a-zA-Z0-9\.]+)?$/s', json_decode($output)) );
 
-		// -------------------
-		// api.get.config
+		// 後始末
 		$output = $this->passthru( [
-			'php',
-			__DIR__.'/testData/publish/px2/.px_execute.php' ,
-			'/?PX=api.get.config' ,
+			'php', __DIR__.'/testData/standard/.px_execute.php', '/?PX=clearcache'
 		] );
+		// var_dump($output);
 		clearstatcache();
-
+		$this->assertTrue( $this->common_error( $output ) );
+		$this->assertTrue( !is_dir( __DIR__.'/testData/standard/caches/p/' ) );
+		$this->assertTrue( !is_dir( __DIR__.'/testData/standard/px-files/_sys/ram/caches/sitemaps/' ) );
 	}// testBefore()
 
 	/**
@@ -192,6 +177,8 @@ class mainTest extends PHPUnit_Framework_TestCase{
 
 	/**
 	 * パブリッシュディレクトリのテスト
+	 * @depends testBefore
+	 * @depends testStandardPublish
 	 */
 	public function testPublishDirectoryTest(){
 		@$this->fs->mkdir_r( __DIR__.'/testData/publish/published/update_sync_test/' );

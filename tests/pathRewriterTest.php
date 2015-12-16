@@ -20,6 +20,9 @@ class pathRewriterTest extends PHPUnit_Framework_TestCase{
 		$this->assertEquals( $pathRewriter->convert( '/abc/abc_files/1.png' ), '/abc/img/abc_1.png' );
 		$this->assertEquals( $pathRewriter->convert( '/abc/_files/1.png' ), '/abc/_files/1.png' );
 
+		$px->site()->__destruct();
+		$px = null;
+		unset($px);
 	}//testStandardIO()
 
 }
