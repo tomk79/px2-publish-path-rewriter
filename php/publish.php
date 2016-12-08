@@ -6,48 +6,50 @@ namespace tomk79\pickles2\publishPathRewriter;
 
 /**
  * PX Commands "px2-publish-path-rewriter"
+ *
+ * <dl>
+ * 	<dt>PX=publish</dt>
+ * 		<dd>パブリッシュのホーム画面を表示します。</dd>
+ * 	<dt>PX=publish.run</dt>
+ * 		<dd>パブリッシュを実行します。</dd>
+ * 	<dt>PX=publish.version</dt>
+ * 		<dd>Pickles Framework のバージョン番号を JSON 形式の文字列で返します。</dd>
+ * </dl>
  */
 class publish{
 
-	/**
-	 * Picklesオブジェクト
-	 */
+	/** Picklesオブジェクト */
 	private $px;
 
-	/**
-	 * サイトオブジェクト
-	 */
-	private $site;
+	/** プラグイン設定 */
+	private $plugin_conf;
 
-	/**
-	 * パス設定
-	 */
+	/** パス設定 */
 	private $path_tmp_publish, $path_publish_dir, $path_docroot;
 
-	/**
-	 * ドメイン設定
-	 */
+	/** ドメイン設定 */
 	private $domain;
 
-	/**
-	 * パブリッシュ範囲設定
-	 */
-	private $path_region, $param_path_region;
+	/** パブリッシュ範囲設定 */
+	private $path_region;
 
-	/**
-	 * ロックファイルの格納パス
-	 */
+	/** パブリッシュ対象外範囲設定 */
+	private $paths_ignore = array();
+
+	/** キャッシュを消去しないフラグ */
+	private $flg_keep_cache = false;
+
+	/** ロックファイルの格納パス */
 	private $path_lockfile;
 
-	/**
-	 * 処理待ちのパス一覧
-	 */
+	/** 処理待ちのパス一覧 */
 	private $paths_queue = array();
 
-	/**
-	 * 処理済みのパス一覧
-	 */
+	/** 処理済みのパス一覧 */
 	private $paths_done = array();
+
+	/** Extension をマッチさせる正規表現 */
+	private $preg_exts;
 
 	/**
 	 * オプション
@@ -62,15 +64,24 @@ class publish{
 	/**
 	 * Before content function
 	 * @param object $px Picklesオブジェクト
-	 * @param object $options オプション
-	 * PX: PxCommand名。省略時、'publish'。
-	 * rules: パス書き換えルール。2次元配列で複数指定可。
+	 * @param object $json プラグイン設定
+	 * ```
+	 * {
+	 * 	"PX": "publish", // PxCommand名。省略時、'publish'。
+	 * 	"rules": array(), // パス書き換えルール。2次元配列で複数指定可。
+	 * 	"paths_ignore": [
+	 * 		// パブリッシュ対象から常に除外するパスを設定する。
+	 * 		// (ここに設定されたパスは、動的なプレビューは可能)
+	 * 		"/sample_pages/no_publish/*"
+	 * 	]
+	 * }
+	 * ```
 	 */
-	public static function register( $px, $options = null ){
-		$self = new self( $px, $options );
+	public static function register( $px, $json = null ){
+		$self = new self( $px, $json );
 		$cmd_name = 'publish';
-		if( @strlen($options->PX) ){
-			$cmd_name = $options->PX;
+		if( @strlen($json->PX) ){
+			$cmd_name = $json->PX;
 		}
 		$px->pxcmd()->register($cmd_name, array($self, 'execute'));
 	}
@@ -108,7 +119,6 @@ class publish{
 		$param_path_region = $this->px->req()->get_param('path_region');
 		if( strlen( $param_path_region ) && $param_path_region != $this->path_region && $func_check_param_path( $param_path_region ) ){
 			$this->path_region = $param_path_region;
-			$this->param_path_region = $param_path_region;
 		}
 
 		// make instance of pathRewriter
