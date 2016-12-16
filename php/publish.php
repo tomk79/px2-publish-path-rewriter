@@ -69,6 +69,7 @@ class publish{
 	 * {
 	 * 	"PX": "publish", // PxCommand名。省略時、'publish'。
 	 * 	"rules": array(), // パス書き換えルール。2次元配列で複数指定可。
+	 * 	"dom_selectors": array(), // パス書き換えの対象にするDOMセレクタ。連想配列で複数指定可。
 	 * 	"paths_ignore": [
 	 * 		// パブリッシュ対象から常に除外するパスを設定する。
 	 * 		// (ここに設定されたパスは、動的なプレビューは可能)
@@ -170,7 +171,7 @@ class publish{
 		}
 
 		// make instance of pathRewriter
-		$this->pathRewriter = new pathRewriter( $this->px, $this->options );
+		$this->pathRewriter = new pathRewriter( $this->px, $json );
 	}
 
 	/**
@@ -523,18 +524,6 @@ function cont_EditPublishTargetPathApply(formElm){
 								$this->alert_log(array( @date('Y-m-d H:i:s'), $path, '[path rewrite] conflict rewrite result. "'.$path_rewrited.'" is already exists.' ));
 							}
 						}
-						$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) );
-						$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited, base64_decode( @$bin->body_base64 ) );
-						foreach( $bin->relatedlinks as $link ){
-							$link = $this->px->fs()->get_realpath( $link, dirname($this->path_docroot.$path).'/' );
-							$link = $this->px->fs()->normalize_path( $link );
-							$tmp_link = preg_replace( '/^'.preg_quote($this->px->get_path_controot(), '/').'/s', '/', $link );
-							if( $this->px->fs()->is_dir( $this->px->get_path_docroot().'/'.$link ) ){
-								$this->make_list_by_dir_scan( $tmp_link.'/' );
-							}else{
-								$this->add_queue( $tmp_link );
-							}
-						}
 						// / px2-publish-path-rewriter custom
 
 					}elseif( $bin->status >= 100 ){
@@ -545,8 +534,8 @@ function cont_EditPublishTargetPathApply(formElm){
 
 					// コンテンツの書き出し処理
 					// エラーが含まれている場合でも、得られたコンテンツを出力する。
-					$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) );
-					$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path, base64_decode( @$bin->body_base64 ) );
+					$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) );
+					$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited, base64_decode( @$bin->body_base64 ) );
 					foreach( $bin->relatedlinks as $link ){
 						$link = $this->px->fs()->get_realpath( $link, dirname($this->path_docroot.$path).'/' );
 						$link = $this->px->fs()->normalize_path( $link );
