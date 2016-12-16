@@ -89,11 +89,11 @@ class publish{
 	/**
 	 * constructor
 	 * @param object $px Picklesオブジェクト
-	 * @param object $options オプション
+	 * @param object $json プラグイン設定
 	 */
-	public function __construct( $px, $options = null ){
+	public function __construct( $px, $json ){
 		$this->px = $px;
-		$this->options = $options;
+		$this->plugin_conf = $json;
 
 		$this->path_tmp_publish = $px->fs()->get_realpath( $px->get_path_homedir().'_sys/ram/publish/' );
 		$this->path_lockfile = $this->path_tmp_publish.'applock.txt';
@@ -103,9 +103,17 @@ class publish{
 		$this->domain = $px->conf()->domain;
 		$this->path_docroot = $px->conf()->path_controot;
 
-		$this->path_region = $this->px->req()->get_request_file_path();
-		$this->path_region = preg_replace('/^\/+/s','/',$this->path_region);
-		$this->path_region = preg_replace('/\/'.$this->px->get_directory_index_preg_pattern().'$/s','/',$this->path_region);
+		// Extensionをマッチさせる正規表現
+		$process = array_keys( get_object_vars( $this->px->conf()->funcs->processor ) );
+		foreach( $process as $key=>$val ){
+			$process[$key] = preg_quote($val);
+		}
+		$this->preg_exts = '('.implode( '|', $process ).')';
+
+		// パブリッシュ対象範囲
+		$path_region = $this->px->req()->get_request_file_path();
+		$path_region = preg_replace('/^\/+/s','/',$path_region);
+		$path_region = preg_replace('/\/'.$this->px->get_directory_index_preg_pattern().'$/s','/',$path_region);
 		$func_check_param_path = function($path){
 			if( !preg_match('/^\//', $path) ){
 				return false;
@@ -117,27 +125,40 @@ class publish{
 			return true;
 		};
 		$param_path_region = $this->px->req()->get_param('path_region');
-		if( strlen( $param_path_region ) && $param_path_region != $this->path_region && $func_check_param_path( $param_path_region ) ){
-			$this->path_region = $param_path_region;
+		if( strlen( $param_path_region ) && $param_path_region != $path_region && $func_check_param_path( $param_path_region ) ){
+			$path_region = $param_path_region;
+		}
+		$this->paths_region = array( $path_region );
+		unset( $path_region, $param_path_region );
+
+		// パブリッシュ対象範囲(複数指定する場合)
+		$paths_region = $this->px->req()->get_param('paths_region');
+		if( is_array($paths_region) ){
+			$this->paths_region = array_merge( $this->paths_region, $paths_region );
+		}
+
+		// パブリッシュ範囲の指定から、2重拡張子の2つ目を削除
+		foreach( $this->paths_region as $tmp_key=>$tmp_localpath_region ){
+			if( !is_dir('./'.$tmp_localpath_region) && preg_match( '/\.'.$this->preg_exts.'\.'.$this->preg_exts.'$/is', $tmp_localpath_region ) ){
+				$this->paths_region[$tmp_key] = preg_replace( '/\.'.$this->preg_exts.'$/is', '', $tmp_localpath_region );
+			}
+		}
+		unset($tmp_localpath_region, $tmp_key);
+
+		// キャッシュを消去しないフラグ
+		$this->flg_keep_cache = !!$this->px->req()->get_param('keep_cache');
+
+		// パブリッシュ対象外の範囲
+		$this->paths_ignore = $this->px->req()->get_param('paths_ignore');
+		if( is_string($this->paths_ignore) ){
+			$this->paths_ignore = array( $this->paths_ignore );
+		}
+		if( !is_array($this->paths_ignore) ){
+			$this->paths_ignore = array();
 		}
 
 		// make instance of pathRewriter
 		$this->pathRewriter = new pathRewriter( $this->px, $this->options );
-	}
-
-	/**
-	 * パブリッシュコマンドを実行する
-	 * @param object $px Picklesオブジェクト
-	 */
-	public function execute($px){
-		// var_dump($this->options);
-		$pxcmd = $px->get_px_command();
-		if( @$pxcmd[1] == 'run' ){
-			$this->exec_publish();
-		}else{
-			$this->exec_home();
-		}
-		exit;
 	}
 
 	/**
@@ -146,14 +167,15 @@ class publish{
 	private function cli_header(){
 		ob_start();
 		print $this->px->pxcmd()->get_cli_header();
-		print 'px2-publish-path-rewriter'."\n";
-		print '------------'."\n";
 		print 'publish directory(tmp): '.$this->path_tmp_publish."\n";
 		print 'lockfile: '.$this->path_lockfile."\n";
 		print 'publish directory: '.$this->path_publish_dir."\n";
 		print 'domain: '.$this->domain."\n";
 		print 'docroot directory: '.$this->path_docroot."\n";
-		print 'region: '.$this->path_region."\n";
+		print 'ignore: '.join(', ', $this->plugin_conf->paths_ignore)."\n";
+		print 'region: '.join(', ', $this->paths_region)."\n";
+		print 'ignore (tmp): '.join(', ', $this->paths_ignore)."\n";
+		print 'keep cache: '.($this->flg_keep_cache ? 'true' : 'false')."\n";
 		print '------------'."\n";
 		flush();
 		return ob_get_clean();
@@ -182,22 +204,40 @@ class publish{
 
 	/**
 	 * execute home
+	 * @param object $px Picklesオブジェクト
 	 */
-	private function exec_home(){
+	public function exec_home( $px ){
+		$pxcmd = $this->px->get_px_command();
+
+		if( @$pxcmd[1] == 'version' ){
+			// 命令が publish.version の場合、バージョン番号を返す。
+			$val = $this->px->get_version();
+			@header('Content-type: application/json; charset=UTF-8');
+			print json_encode($val);
+			exit;
+		}
+		if( @$pxcmd[1] == 'run' ){
+			// 命令が publish.run の場合、実行する。
+			$this->exec_publish( $px );
+			exit;
+		}
+		if( @strlen($pxcmd[1]) ){
+			// 命令が不明の場合、エラーを表示する。
+			if( $this->px->req()->is_cmd() ){
+				header('Content-type: text/plain;');
+				print $this->cli_header();
+				print 'execute PX command => "?PX=publish.run"'."\n";
+				print $this->cli_footer();
+			}else{
+				$html = '<p>Go to <a href="?PX=publish">PX=publish</a> to execute publish.</p>'."\n";
+				print $this->px->pxcmd()->wrap_gui_frame($html);
+			}
+			exit;
+		}
+
 		if( $this->px->req()->is_cmd() ){
 			header('Content-type: text/plain;');
 			print $this->cli_header();
-			for($i=0; $i<10; $i++){
-				print '_'; usleep(400000);
-				print "\r";
-				print '\\'; usleep(50000);
-				print "\r";
-				print '|'; usleep(50000);
-				print "\r";
-				print '/'; usleep(50000);
-				print "\r";
-			}
-
 			print 'execute PX command => "?PX=publish.run"'."\n";
 			print $this->cli_footer();
 		}else{
@@ -252,7 +292,8 @@ function cont_EditPublishTargetPath(){
 }
 function cont_EditPublishTargetPathApply(formElm){
 	var path = $('input[name=path]', formElm).val();
-	window.location.href = <?= json_encode($this->px->get_path_controot()) ?> + path + '?PX=publish&path_region='+encodeURIComponent(path);
+	path = path.replace( new RegExp('^\\/'), '' );
+	window.location.href = window.location.origin + "<?= $this->px->get_path_controot() ?>" + path + '?PX=publish&path_region='+encodeURIComponent(path);
 }
 </script>
 <div class="unit">
@@ -279,12 +320,12 @@ function cont_EditPublishTargetPathApply(formElm){
 			<th style="word-break:break-all;">region</th>
 			<td style="word-break:break-all;">
 				<div class="cont_publish_target_path_preview">
-					<div style="word-break:break-all;"><?= htmlspecialchars($this->path_region) ?></div>
+					<div style="word-break:break-all;"><?= htmlspecialchars($this->paths_region[0]) ?></div>
 					<div class="small"><a href="javascript:cont_EditPublishTargetPath();" class="icon">変更する</a></div>
 				</div>
 				<div class="cont_publish_target_path_editor" style="display:none;">
 					<form action="?" method="get" onsubmit="cont_EditPublishTargetPathApply(this); return false;" class="inline">
-						<input type="text" name="path" size="25" style="max-width:70%;" value="<?= htmlspecialchars($this->path_region) ?>" />
+						<input type="text" name="path" size="25" style="max-width:70%;" value="<?= htmlspecialchars($this->paths_region[0]) ?>" />
 						<input type="submit" style="width:20%;" value="変更する" />
 					</form>
 				</div>
@@ -310,8 +351,9 @@ function cont_EditPublishTargetPathApply(formElm){
 
 	/**
 	 * execute publish
+	 * @param object $px Picklesオブジェクト
 	 */
-	private function exec_publish(){
+	private function exec_publish( $px ){
 		header('Content-type: text/plain;');
 		print $this->cli_header();
 
@@ -340,6 +382,10 @@ function cont_EditPublishTargetPathApply(formElm){
 		$this->clearcache();
 		print "\n";
 
+		// make instance $site
+		require_once(__DIR__.'/../site.php');
+		$this->px->set_site( new \picklesFramework2\site($this->px) );
+
 		print '============'."\n";
 		print '## Making list'."\n";
 		print "\n";
@@ -347,7 +393,9 @@ function cont_EditPublishTargetPathApply(formElm){
 		$this->make_list_by_sitemap();
 		print "\n";
 		print '-- making list by Directory Scan'."\n";
-		$this->make_list_by_dir_scan();
+		foreach( $this->get_region_root_path() as $path_region ){
+			$this->make_list_by_dir_scan( $path_region );
+		}
 		print "\n";
 		print '============'."\n";
 		print '## Start publishing'."\n";
@@ -363,12 +411,15 @@ function cont_EditPublishTargetPathApply(formElm){
 			}
 			foreach( $this->paths_queue as $path=>$val ){break;}
 			print '------------'."\n";
+
+			// px2-publish-path-rewriter custom
 			$path_rewrited = $this->pathRewriter->convert($path);
 			print $path;
 			if( $path != $path_rewrited ){
 				print ' -> '.$path_rewrited;
 			}
 			print "\n";
+			// / px2-publish-path-rewriter custom
 
 			$ext = strtolower( pathinfo( $path , PATHINFO_EXTENSION ) );
 			$proc_type = $this->px->get_path_proc_type( $path );
@@ -376,29 +427,16 @@ function cont_EditPublishTargetPathApply(formElm){
 			$status_message = null;
 			$errors = array();
 			$microtime = microtime(true);
-
-			$is_conflict = false;
-			if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
-				$is_conflict = true;
-			}
-
 			switch( $proc_type ){
-				case 'direct':
-					// direct
-					print $ext.' -> direct'."\n";
-
-					if( $is_conflict ){
-						if( md5_file( dirname($_SERVER['SCRIPT_FILENAME']).$path ) != md5_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
-							$this->alert_log(array( @date('Y-m-d H:i:s'), $path, '[path rewrite] conflict rewrite result. "'.$path_rewrited.'" is already exists.' ));
-						}
-					}
-
-					if( !$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ) ){
+				case 'pass':
+					// pass
+					print $ext.' -> '.$proc_type."\n";
+					if( !$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) ) ){
 						$status_code = 500;
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'FAILED to making parent directory.' ));
 						break;
 					}
-					if( !$this->px->fs()->copy( dirname($_SERVER['SCRIPT_FILENAME']).$path , $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
+					if( !$this->px->fs()->copy( dirname($_SERVER['SCRIPT_FILENAME']).$path , $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) ){
 						$status_code = 500;
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'FAILED to copying file.' ));
 						break;
@@ -406,6 +444,7 @@ function cont_EditPublishTargetPathApply(formElm){
 					$status_code = 200;
 					break;
 
+				case 'direct':
 				default:
 					// pickles execute
 					print $ext.' -> '.$proc_type."\n";
@@ -442,7 +481,8 @@ function cont_EditPublishTargetPathApply(formElm){
 						$bin = new \stdClass;
 						$bin->status = 500;
 						$bin->message = 'Unknown server error';
-						$bin->errors = ['Unknown server error.'];
+						$bin->errors = array('Unknown server error.');
+						$bin->relatedlinks = array();
 					}
 					$status_code = @$bin->status;
 					$status_message = @$bin->message;
@@ -454,27 +494,26 @@ function cont_EditPublishTargetPathApply(formElm){
 					}elseif( $bin->status >= 300 ){
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'status: '.$bin->status.' '.$bin->message ));
 					}elseif( $bin->status >= 200 ){
-						if( $is_conflict ){
-							if( md5( base64_decode( @$bin->body_base64 ) ) != md5_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
-								$this->alert_log(array( @date('Y-m-d H:i:s'), $path, '[path rewrite] conflict rewrite result. "'.$path_rewrited.'" is already exists.' ));
-							}
-						}
-						$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) );
-						$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited, base64_decode( @$bin->body_base64 ) );
-						foreach( $bin->relatedlinks as $link ){
-							$link = $this->px->fs()->get_realpath( $link, dirname($this->path_docroot.$path).'/' );
-							$link = $this->px->fs()->normalize_path( $link );
-							$tmp_link = preg_replace( '/^'.preg_quote($this->px->get_path_controot(), '/').'/s', '/', $link );
-							if( $this->px->fs()->is_dir( $this->px->get_path_docroot().'/'.$link ) ){
-								$this->make_list_by_dir_scan( $tmp_link.'/' );
-							}else{
-								$this->add_queue( $tmp_link );
-							}
-						}
+						// 200 番台は正常
 					}elseif( $bin->status >= 100 ){
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'status: '.$bin->status.' '.$bin->message ));
 					}else{
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'Unknown status code.' ));
+					}
+
+					// コンテンツの書き出し処理
+					// エラーが含まれている場合でも、得られたコンテンツを出力する。
+					$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) );
+					$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path, base64_decode( @$bin->body_base64 ) );
+					foreach( $bin->relatedlinks as $link ){
+						$link = $this->px->fs()->get_realpath( $link, dirname($this->path_docroot.$path).'/' );
+						$link = $this->px->fs()->normalize_path( $link );
+						$tmp_link = preg_replace( '/^'.preg_quote($this->px->get_path_controot(), '/').'/s', '/', $link );
+						if( $this->px->fs()->is_dir( $this->px->get_path_docroot().'/'.$link ) ){
+							$this->make_list_by_dir_scan( $tmp_link.'/' );
+						}else{
+							$this->add_queue( $tmp_link );
+						}
 					}
 
 					// エラーメッセージを alert_log に追記
@@ -487,21 +526,6 @@ function cont_EditPublishTargetPathApply(formElm){
 					break;
 			}
 
-			$tmp_realpath_file = $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited;
-			if( $this->px->fs()->is_file( $tmp_realpath_file ) ){
-				$tmpBin = $this->px->fs()->read_file( $tmp_realpath_file );
-				switch(strtolower($ext)){
-					case 'html':
-					case 'htm':
-						$tmpBin = $this->pathRewriter->convert_html($tmpBin, $path);
-						break;
-					case 'css':
-						$tmpBin = $this->pathRewriter->convert_css($tmpBin, $path);
-						break;
-				}
-				$this->px->fs()->save_file( $tmp_realpath_file, $tmpBin );
-			}
-
 			$str_errors = '';
 			if( is_array($errors) && count($errors) ){
 				$str_errors .= count($errors).' errors: ';
@@ -510,22 +534,21 @@ function cont_EditPublishTargetPathApply(formElm){
 			$this->log(array(
 				@date('Y-m-d H:i:s') ,
 				$path ,
-				($path!=$path_rewrited?$path_rewrited:'') ,
 				$proc_type ,
 				$status_code ,
 				$status_message ,
 				$str_errors,
-				@filesize($this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited),
+				@filesize($this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path),
 				microtime(true)-$microtime
 			));
 
 			if( !empty( $this->path_publish_dir ) ){
 				// パブリッシュ先ディレクトリに都度コピー
-				if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
-					$this->px->fs()->mkdir_r( dirname( $this->path_publish_dir.$this->path_docroot.$path_rewrited ) );
+				if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) ){
+					$this->px->fs()->mkdir_r( dirname( $this->path_publish_dir.$this->path_docroot.$path ) );
 					$this->px->fs()->copy(
-						$this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ,
-						$this->path_publish_dir.$this->path_docroot.$path_rewrited
+						$this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ,
+						$this->path_publish_dir.$this->path_docroot.$path
 					);
 					print ' -> copied to publish dir'."\n";
 				}
@@ -550,11 +573,13 @@ function cont_EditPublishTargetPathApply(formElm){
 			print '## Sync to publish directory.'."\n";
 			print "\n";
 			set_time_limit(30*60);
-			$this->sync_dir(
-				$this->path_tmp_publish.'/htdocs'.$this->path_docroot ,
-				$this->path_publish_dir.$this->path_docroot ,
-				$this->path_region
-			);
+			foreach( $this->paths_region as $path_region ){
+				$this->sync_dir(
+					$this->path_tmp_publish.'/htdocs'.$this->path_docroot ,
+					$this->path_publish_dir.$this->path_docroot ,
+					$path_region
+				);
+			}
 		}
 		print "\n";
 		print '============'."\n";
@@ -603,6 +628,8 @@ function cont_EditPublishTargetPathApply(formElm){
 			if( $this->px->fs()->mkdir_r( dirname( $to.$path_region ) ) ){
 				if( $this->px->is_ignore_path( $path_region ) ){
 					// ignore指定されているパスには、操作しない。
+				}elseif( !$this->is_region_path( $path_region ) ){
+					// 範囲外のパスには、操作しない。
 				}else{
 					if( !$this->px->fs()->copy( $from.$path_region , $to.$path_region , $perm ) ){
 						$result = false;
@@ -615,6 +642,8 @@ function cont_EditPublishTargetPathApply(formElm){
 			if( !@is_dir( $to.$path_region ) ){
 				if( $this->px->is_ignore_path( $path_region ) ){
 					// ignore指定されているパスには、操作しない。
+				}elseif( !$this->is_region_path( $path_region ) ){
+					// 範囲外のパスには、操作しない。
 				}else{
 					if( !$this->px->fs()->mkdir_r( $to.$path_region ) ){
 						$result = false;
@@ -628,8 +657,10 @@ function cont_EditPublishTargetPathApply(formElm){
 					if( @is_file( $to.$path_region.DIRECTORY_SEPARATOR.$Line ) ){
 						continue;
 					}elseif( !@is_dir( $to.$path_region.DIRECTORY_SEPARATOR.$Line ) ){
-						if( $this->px->is_ignore_path( $path_region ) ){
+						if( $this->px->is_ignore_path( $path_region.DIRECTORY_SEPARATOR.$Line ) ){
 							// ignore指定されているパスには、操作しない。
+						}elseif( !$this->is_region_path( $path_region.DIRECTORY_SEPARATOR.$Line ) ){
+							// 範囲外のパスには、操作しない。
 						}else{
 							if( !$this->px->fs()->mkdir_r( $to.$path_region.DIRECTORY_SEPARATOR.$Line ) ){
 								$result = false;
@@ -673,6 +704,9 @@ function cont_EditPublishTargetPathApply(formElm){
 			if( $this->px->is_ignore_path( $path_region ) ){
 				// ignore指定されているパスには、操作しない。
 				return true;
+			}elseif( !$this->is_region_path( $path_region ) ){
+				// 範囲外のパスには、操作しない。
+				return true;
 			}
 			$this->px->fs()->rm( $target.$path_region );
 			return true;
@@ -704,7 +738,7 @@ function cont_EditPublishTargetPathApply(formElm){
 			error_log( $this->px->fs()->mk_csv( array(array(
 				'datetime' ,
 				'path' ,
-				'path_rewrited' ,
+				'path_rewrited' , // <- px2-publish-path-rewriter custom
 				'proc_type' ,
 				'status_code' ,
 				'status_message' ,
@@ -765,11 +799,83 @@ function cont_EditPublishTargetPathApply(formElm){
 	 * clearcache
 	 */
 	private function clearcache(){
-		(new \picklesFramework2\commands\clearcache( $this->px ))->exec();
+
+		// キャッシュを消去
+		if( !$this->flg_keep_cache ){
+			(new clearcache( $this->px ))->exec();
+		}else{
+			// 一時パブリッシュディレクトリをクリーニング
+			echo '-- cleaning "publish"'."\n";
+			$this->cleanup_tmp_publish_dir( $this->path_tmp_publish );
+		}
+
+		return true;
+	}
+
+	/**
+	 * 一時パブリッシュディレクトリをクリーニング
+	 * @param string $path クリーニング対象のパス
+	 * @param string $localpath $pathの仮想のパス (再帰処理のために使用)
+	 */
+	private function cleanup_tmp_publish_dir( $path, $localpath = null ){
+		$count = 0;
+		$ls = $this->px->fs()->ls($path.$localpath);
+		foreach( $ls as $basename ){
+			if( $localpath.$basename == '.gitkeep' ){
+				continue;
+			}
+			if( $this->px->fs()->is_dir($path.$localpath.$basename) ){
+				$count += $this->cleanup_tmp_publish_dir( $path, $localpath.$basename.DIRECTORY_SEPARATOR );
+
+				$i = 0;
+				print 'rmdir '.$this->px->fs()->get_realpath( $path.$localpath.$basename );
+				while(1){
+					$i ++;
+					if( $this->px->fs()->rmdir($path.$localpath.$basename) ){
+						break;
+					}
+					if($i > 5){
+						print ' [FAILED]';
+						break;
+					}
+					sleep(1);
+				}
+				print "\n";
+				$count ++;
+
+			}else{
+				clearstatcache();
+				if( $this->px->fs()->get_realpath($path.$localpath.$basename) == $this->path_lockfile ){
+					// パブリッシュロックファイルは消さない
+				}else{
+					$i = 0;
+					print 'rm '.$this->px->fs()->get_realpath( $path.$localpath.$basename );
+					while(1){
+						$i ++;
+						if( $this->px->fs()->rm($path.$localpath.$basename) ){
+							break;
+						}
+						if($i > 5){
+							print ' [FAILED]';
+							break;
+						}
+						sleep(1);
+					}
+					print "\n";
+					$count ++;
+				}
+			}
+		}
+
+		if( is_null($localpath) ){
+			$this->px->fs()->save_file( $path.$localpath.'.gitkeep', '' );
+		}
+		return $count;
 	}
 
 	/**
 	 * make list by sitemap
+	 * @return bool 常に `true` を返します。
 	 */
 	private function make_list_by_sitemap(){
 		$sitemap = $this->px->site()->get_sitemap();
@@ -789,17 +895,43 @@ function cont_EditPublishTargetPathApply(formElm){
 
 	/**
 	 * make list by directory scan
-	 * @param string $path パス
+	 *
+	 * @param string $path ファイル または ディレクトリ のパス
+	 * @return bool 常に真
 	 */
 	private function make_list_by_dir_scan( $path = null ){
-		$process = array_keys( get_object_vars( $this->px->conf()->funcs->processor ) );
-		foreach( $process as $key=>$val ){
-			$process[$key] = preg_quote($val);
-		}
-		$preg_exts = '('.implode( '|', $process ).')';
 
 		$realpath = $this->px->fs()->get_realpath('./'.$path);
+
+		if( !file_exists( $realpath ) ){
+			// 直にファイルが存在しない場合、2重拡張子のファイルを検索
+			$tmp_process = array_keys( get_object_vars( $this->px->conf()->funcs->processor ) );
+			foreach( $tmp_process as $tmp_ext ){
+				if( $this->px->fs()->is_file( $realpath.'.'.$tmp_ext ) ){
+					$realpath = $realpath.'.'.$tmp_ext;
+					break;
+				}
+			}
+			unset($tmp_process, $tmp_ext);
+		}
+
+		if( $this->px->fs()->is_file( $realpath ) ){
+			$tmp_localpath = $this->px->fs()->get_realpath('/'.$path);
+			if( preg_match( '/\.'.$this->preg_exts.'\.'.$this->preg_exts.'$/is', $tmp_localpath ) ){
+				$tmp_localpath = preg_replace( '/\.'.$this->preg_exts.'$/is', '', $tmp_localpath );
+			}
+			if( $this->px->get_path_proc_type( $tmp_localpath ) == 'ignore' || $this->px->get_path_proc_type( $tmp_localpath ) == 'pass' ){
+				$tmp_localpath = $this->px->fs()->get_realpath('/'.$path);
+			}
+			$tmp_localpath = $this->px->fs()->normalize_path( $tmp_localpath );
+			$this->add_queue( $tmp_localpath );
+			return true;
+		}
+
 		$ls = $this->px->fs()->ls( $realpath );
+		if( !is_array($ls) ){
+			$ls = array();
+		}
 		// ↓ `/index.html` がignoreされている場合に、
 		// 　ディレクトリスキャンがキャンセルされてしまう問題があり、
 		// 　ここでの評価はしないことにした。
@@ -809,17 +941,7 @@ function cont_EditPublishTargetPathApply(formElm){
 		// }
 		foreach( $ls as $basename ){
 			set_time_limit(30);
-			if( $this->px->fs()->is_dir( $realpath.$basename ) ){
-				$this->make_list_by_dir_scan( $path.$basename.DIRECTORY_SEPARATOR );
-			}else{
-				$tmp_localpath = $this->px->fs()->get_realpath('/'.$path.$basename);
-				$tmp_localpath = preg_replace( '/\.'.$preg_exts.'$/is', '', $tmp_localpath );
-				if( $this->px->get_path_proc_type( $tmp_localpath ) == 'ignore' || $this->px->get_path_proc_type( $tmp_localpath ) == 'direct' ){
-					$tmp_localpath = $this->px->fs()->get_realpath('/'.$path.$basename);
-				}
-				$tmp_localpath = $this->px->fs()->normalize_path( $tmp_localpath );
-				$this->add_queue( $tmp_localpath );
-			}
+			$this->make_list_by_dir_scan( $path.DIRECTORY_SEPARATOR.$basename );
 		}
 		return true;
 	}
@@ -827,6 +949,7 @@ function cont_EditPublishTargetPathApply(formElm){
 	/**
 	 * add queue
 	 * @param string $path 対象のパス
+	 * @return bool 真偽
 	 */
 	private function add_queue( $path ){
 		$path = $this->px->fs()->normalize_path( $this->px->fs()->get_realpath( $path, $this->path_docroot ) );
@@ -836,6 +959,10 @@ function cont_EditPublishTargetPathApply(formElm){
 
 		if( $this->px->is_ignore_path( $path ) ){
 			// 対象外
+			return false;
+		}
+		if( $this->is_ignore_path( $path ) ){
+			// パブリッシュ対象外
 			return false;
 		}
 		if( !$this->is_region_path( $path ) ){
@@ -856,8 +983,54 @@ function cont_EditPublishTargetPathApply(formElm){
 	}
 
 	/**
+	 * パブリッシュ対象か調べる
+	 * @param string $path 対象のパス
+	 * @return bool 真偽
+	 */
+	private function is_ignore_path( $path ){
+		static $rtn = array();
+		if( is_null($path) ){
+			return true;
+		}
+		$path = $this->px->fs()->get_realpath( '/'.$path );
+		if( is_dir('./'.$path) ){
+			$path .= '/'.$this->px->get_directory_index_primary();
+		}
+		if( preg_match('/(?:\/|\\\\)$/', $path) ){
+			$path .= $this->px->get_directory_index_primary();
+		}
+		$path = $this->px->fs()->normalize_path($path);
+
+		if( @is_bool($rtn[$path]) ){
+			return $rtn[$path];
+		}
+
+		foreach( $this->plugin_conf->paths_ignore as $row ){
+			if(!is_string($row)){continue;}
+			$preg_pattern = preg_quote($this->px->fs()->normalize_path($this->px->fs()->get_realpath($row)), '/');
+			if( preg_match('/\*/',$preg_pattern) ){
+				// ワイルドカードが使用されている場合
+				$preg_pattern = preg_quote($row,'/');
+				$preg_pattern = preg_replace('/'.preg_quote('\*','/').'/','(?:.*?)',$preg_pattern);//ワイルドカードをパターンに反映
+				$preg_pattern = $preg_pattern.'$';//前方・後方一致
+			}elseif(is_dir($row)){
+				$preg_pattern = preg_quote($this->px->fs()->normalize_path($this->px->fs()->get_realpath($row)).'/','/');
+			}elseif(is_file($row)){
+				$preg_pattern = preg_quote($this->px->fs()->normalize_path($this->px->fs()->get_realpath($row)),'/');
+			}
+			if( preg_match( '/^'.$preg_pattern.'$/s' , $path ) ){
+				$rtn[$path] = true;
+				return $rtn[$path];
+			}
+		}
+		$rtn[$path] = false;// <- default
+		return $rtn[$path];
+	}// is_ignore_path()
+
+	/**
 	 * パブリッシュ範囲内か調べる
 	 * @param string $path 対象のパス
+	 * @return bool 真偽
 	 */
 	private function is_region_path( $path ){
 		$path = $this->px->fs()->get_realpath( '/'.$path );
@@ -865,11 +1038,46 @@ function cont_EditPublishTargetPathApply(formElm){
 			$path .= '/';
 		}
 		$path = $this->px->fs()->normalize_path($path);
-		if( preg_match( '/^'.preg_quote( $this->path_region, '/' ).'/s' , $path ) ){
-			return true;
+		$is_region = false;
+		foreach( $this->paths_region as $path_region ){
+			if( preg_match( '/^'.preg_quote( $path_region, '/' ).'/s' , $path ) ){
+				$is_region = true;
+				break;
+			}
 		}
-		return false;
+		if( !$is_region ){
+			return false;
+		}
+		foreach( $this->paths_ignore as $path_ignore ){
+			if( preg_match( '/^'.preg_quote( $path_ignore, '/' ).'/s' , $path ) ){
+				return false;
+			}
+		}
+		return true;
 	}// is_region_path()
+
+
+	/**
+	 * パブリッシュ範囲のルートパスを得る
+	 * @return string パブリッシュ範囲のルートパス
+	 */
+	private function get_region_root_path(){
+		$rtn = array();
+		foreach( $this->paths_region as $path_region ){
+			$path = $this->px->fs()->get_realpath( '/'.$path_region );
+			$path = $this->px->fs()->normalize_path($path);
+			// ↓スキャンする対象が実在するディレクトリである必要はないので削除。
+			// 　実在しない場合は無視されるだけなので問題ない。
+			// 　この処理が有効だった場合、ファイル名名指しでパブリッシュしようとした場合にも、
+			// 　実在する親ディレクトリに遡ってスキャンしてしまうため、無駄に処理に時間がかかってしまっていた。
+			// while( !$this->px->fs()->is_dir('./'.$path) ){
+			// 	$path = $this->px->fs()->normalize_path(dirname($path).'/');
+			// }
+			// var_dump($path);
+			array_push($rtn, $path);
+		}
+		return $rtn;
+	}// get_region_root_path()
 
 
 	/**
