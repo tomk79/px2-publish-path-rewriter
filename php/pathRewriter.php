@@ -75,6 +75,10 @@ class pathRewriter{
 	 * @return string                変換後のHTMLソース
 	 */
 	public function convert_html( $src, $original_path ){
+		if( !strlen( $src ) ){
+			return $src;
+		}
+
 		$path_rewrited = $this->convert($original_path);
 		// var_dump($original_path);
 

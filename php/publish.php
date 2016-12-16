@@ -77,13 +77,25 @@ class publish{
 	 * }
 	 * ```
 	 */
-	public static function register( $px, $json = null ){
-		$self = new self( $px, $json );
+	public static function register( $px, $json ){
+
+		// プラグイン設定の初期化
+		if( !is_object(@$json) ){
+			$json = json_decode('{}');
+		}
+		if( !is_array(@$json->paths_ignore) ){
+			$json->paths_ignore = array();
+		}
+		// var_dump($json);
+
 		$cmd_name = 'publish';
 		if( @strlen($json->PX) ){
 			$cmd_name = $json->PX;
 		}
-		$px->pxcmd()->register($cmd_name, array($self, 'execute'));
+
+		$self = new self( $px, $json );
+
+		$px->pxcmd()->register($cmd_name, array($self, 'exec_home'));
 	}
 
 	/**
@@ -167,6 +179,8 @@ class publish{
 	private function cli_header(){
 		ob_start();
 		print $this->px->pxcmd()->get_cli_header();
+		print 'px2-publish-path-rewriter'."\n";
+		print '------------'."\n";
 		print 'publish directory(tmp): '.$this->path_tmp_publish."\n";
 		print 'lockfile: '.$this->path_lockfile."\n";
 		print 'publish directory: '.$this->path_publish_dir."\n";
@@ -383,7 +397,6 @@ function cont_EditPublishTargetPathApply(formElm){
 		print "\n";
 
 		// make instance $site
-		require_once(__DIR__.'/../site.php');
 		$this->px->set_site( new \picklesFramework2\site($this->px) );
 
 		print '============'."\n";
@@ -427,6 +440,14 @@ function cont_EditPublishTargetPathApply(formElm){
 			$status_message = null;
 			$errors = array();
 			$microtime = microtime(true);
+
+			// px2-publish-path-rewriter custom
+			$is_conflict = false;
+			if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
+				$is_conflict = true;
+			}
+			// / px2-publish-path-rewriter custom
+
 			switch( $proc_type ){
 				case 'pass':
 					// pass
@@ -495,6 +516,27 @@ function cont_EditPublishTargetPathApply(formElm){
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'status: '.$bin->status.' '.$bin->message ));
 					}elseif( $bin->status >= 200 ){
 						// 200 番台は正常
+
+						// px2-publish-path-rewriter custom
+						if( $is_conflict ){
+							if( md5( base64_decode( @$bin->body_base64 ) ) != md5_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
+								$this->alert_log(array( @date('Y-m-d H:i:s'), $path, '[path rewrite] conflict rewrite result. "'.$path_rewrited.'" is already exists.' ));
+							}
+						}
+						$this->px->fs()->mkdir_r( dirname( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) );
+						$this->px->fs()->save_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited, base64_decode( @$bin->body_base64 ) );
+						foreach( $bin->relatedlinks as $link ){
+							$link = $this->px->fs()->get_realpath( $link, dirname($this->path_docroot.$path).'/' );
+							$link = $this->px->fs()->normalize_path( $link );
+							$tmp_link = preg_replace( '/^'.preg_quote($this->px->get_path_controot(), '/').'/s', '/', $link );
+							if( $this->px->fs()->is_dir( $this->px->get_path_docroot().'/'.$link ) ){
+								$this->make_list_by_dir_scan( $tmp_link.'/' );
+							}else{
+								$this->add_queue( $tmp_link );
+							}
+						}
+						// / px2-publish-path-rewriter custom
+
 					}elseif( $bin->status >= 100 ){
 						$this->alert_log(array( @date('Y-m-d H:i:s'), $path, 'status: '.$bin->status.' '.$bin->message ));
 					}else{
@@ -526,6 +568,23 @@ function cont_EditPublishTargetPathApply(formElm){
 					break;
 			}
 
+			// px2-publish-path-rewriter custom
+			$tmp_realpath_file = $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited;
+			if( $this->px->fs()->is_file( $tmp_realpath_file ) ){
+				$tmpBin = $this->px->fs()->read_file( $tmp_realpath_file );
+				switch(strtolower($ext)){
+					case 'html':
+					case 'htm':
+						$tmpBin = $this->pathRewriter->convert_html($tmpBin, $path);
+						break;
+					case 'css':
+						$tmpBin = $this->pathRewriter->convert_css($tmpBin, $path);
+						break;
+				}
+				$this->px->fs()->save_file( $tmp_realpath_file, $tmpBin );
+			}
+			// / px2-publish-path-rewriter custom
+
 			$str_errors = '';
 			if( is_array($errors) && count($errors) ){
 				$str_errors .= count($errors).' errors: ';
@@ -534,21 +593,22 @@ function cont_EditPublishTargetPathApply(formElm){
 			$this->log(array(
 				@date('Y-m-d H:i:s') ,
 				$path ,
+				($path!=$path_rewrited?$path_rewrited:'') ,
 				$proc_type ,
 				$status_code ,
 				$status_message ,
 				$str_errors,
-				@filesize($this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path),
+				@filesize($this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited),
 				microtime(true)-$microtime
 			));
 
 			if( !empty( $this->path_publish_dir ) ){
 				// パブリッシュ先ディレクトリに都度コピー
-				if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ) ){
-					$this->px->fs()->mkdir_r( dirname( $this->path_publish_dir.$this->path_docroot.$path ) );
+				if( $this->px->fs()->is_file( $this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ) ){
+					$this->px->fs()->mkdir_r( dirname( $this->path_publish_dir.$this->path_docroot.$path_rewrited ) );
 					$this->px->fs()->copy(
-						$this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path ,
-						$this->path_publish_dir.$this->path_docroot.$path
+						$this->path_tmp_publish.'/htdocs'.$this->path_docroot.$path_rewrited ,
+						$this->path_publish_dir.$this->path_docroot.$path_rewrited
 					);
 					print ' -> copied to publish dir'."\n";
 				}
@@ -802,7 +862,7 @@ function cont_EditPublishTargetPathApply(formElm){
 
 		// キャッシュを消去
 		if( !$this->flg_keep_cache ){
-			(new clearcache( $this->px ))->exec();
+			(new \picklesFramework2\commands\clearcache( $this->px ))->exec();
 		}else{
 			// 一時パブリッシュディレクトリをクリーニング
 			echo '-- cleaning "publish"'."\n";
