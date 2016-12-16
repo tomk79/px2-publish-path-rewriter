@@ -1,0 +1,14 @@
+@charset "utf-8";
+
+.cont_test-bg {
+    background-image: url("sampleimage.png");
+}
+.cont_test-bg2 {
+    background-image: url('sampleimage.png');
+}
+.cont_test-bg3 {
+    background-image: url(sampleimage.png);
+}
+.cont_test-bg4 {
+    background-image: url(./sampleimage.png);
+}

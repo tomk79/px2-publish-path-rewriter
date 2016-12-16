@@ -1,0 +1,14 @@
+@charset "UTF-8";
+
+.cont_test-bg {
+    background-image: url("/path_rewrite_test/img/sampleimage.png");
+}
+.cont_test-bg2 {
+    background-image: url("/path_rewrite_test/img/sampleimage.png");
+}
+.cont_test-bg3 {
+    background-image: url("/path_rewrite_test/img/sampleimage.png");
+}
+.cont_test-bg4 {
+    background-image: url("/path_rewrite_test/img/sampleimage.png");
+}
