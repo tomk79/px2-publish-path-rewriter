@@ -209,6 +209,13 @@ class mainTest extends PHPUnit_Framework_TestCase{
 		$this->assertTrue( is_file( __DIR__.'/testData/publish/px2/files_ignored/not_ignored.html' ) );
 		$this->assertTrue( is_file( __DIR__.'/testData/publish/published/files_ignored/not_ignored.html' ) );
 
+		$this->assertTrue( is_file( __DIR__.'/testData/publish/published/path_rewrite_test/img/sampleimage.png' ) );
+		$this->assertFalse( is_file( __DIR__.'/testData/publish/published/path_rewrite_test/index_files/sampleimage.png' ) );
+		$page_src = $this->fs->read_file( __DIR__.'/testData/publish/published/path_rewrite_test/index.html' );
+		$this->assertEquals( preg_match_all( '/'.preg_quote('<img src="/path_rewrite_test/img/sampleimage.png" alt="SAMPLE IMAGE" />', '/').'/s', $page_src ), 1 );
+		$page_src = $this->fs->read_file( __DIR__.'/testData/publish/published/path_rewrite_test/index_files/test.css' );
+		$this->assertEquals( preg_match_all( '/'.preg_quote('"/path_rewrite_test/img/sampleimage.png"', '/').'/s', $page_src ), 4 );
+
 
 
 
